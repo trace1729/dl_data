@@ -1,0 +1,18 @@
+I am working on optimizing hardware design PPA (Performance, Power, Area) using fine-tuned LLMs with Retrieval-Augmented Generation (RAG).To train or evaluate the model effectively, I need a dataset of high-quality question-answer pairs. Each question should contain a short snippet of Verilog code (typically 5–30 lines) that represents a real-world suboptimal hardware design.The answer should provide detailed and practical suggestions to optimize the Verilog code in terms of performance, power, and area. Explanations should be clear and include reasoning behind each suggestion, as well as example code if applicable.The output should be in JSON format, with the following structure:json
+\
+{
+  "question": "<verilog_code_snippet_here>",
+  "answer": {
+      "Performance": "xxx",
+      "Power": "xxx",
+      "Area": "xxx"
+    }
+}
+Please generate [20] high-quality example that fits this format.
+
+1. focus on [gpu, cpu design, fifo, cache, MMU, branch predictor]
+2. target audinence  intermediate verilog user
+3. optimization preference  prioritize performance over power over arer
+4. no design contraints
+
+in english
