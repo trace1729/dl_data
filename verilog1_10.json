@@ -1,0 +1,82 @@
+[
+  {
+    "question": "verilog\nmodule mem_reader(\n input wire clk,\n input wire [7:0] addr,\n output reg [15:0] data_out\n);\n reg [15:0] memory [0:255];\n integer i;\n always @(*) begin\n data_out = 16'b0;\n for (i = 0; i < 256; i = i + 1) begin\n if (i == addr)\n data_out = memory[i];\n end\n end\nendmodule",
+    "answer": {
+      "Performance": "The combinational for-loop creates a giant multiplexer (a long combinational path). Instead, use a synchronous memory access with pipelining. For example, infer block RAM and register the output:\n\nalways @(posedge clk) begin\n if (read_enable)\n data_out <= memory[addr];\nend\n\nThis breaks the logic into stages and meets higher clock speeds, plus it infers block RAM (synchronous read) rather than distributed RAM.",
+      "Power": "Using a clock enable (read_enable) lets you gate the register when idle, reducing clock toggling. Clock gating can cut dynamic power since clock switching is a major power component.",
+      "Area": "A for-loop memory read uses many LUTs (distributed RAM). Using true block RAM (with synchronous read) saves area. Also remove unnecessary multiplexing logic by inferring a single-port RAM or sharing resources if possible."
+    }
+  },
+  {
+    "question": "verilog\nmodule simple_fsm(\n input wire clk,\n input wire rst,\n input wire a, b, c, d,\n output reg out\n);\n reg [1:0] state;\n always @(posedge clk or posedge rst) begin\n if (rst)\n state <= 2'b00;\n else begin\n case (state)\n 2'b00: if (a) state <= 2'b01;\n 2'b01: if (b) state <= 2'b10;\n 2'b10: if (c) state <= 2'b11;\n 2'b11: if (d) state <= 2'b00;\n endcase\n end\n end\n\n always @* begin\n if (state == 2'b00) out = 1;\n else if (state == 2'b11) out = 0;\n end\nendmodule",
+    "answer": {
+      "Performance": "Avoid leaving the combinational output logic without a default: add an else out = ... or use a registered output to remove the large combinational if-else chain (which can slow the design). For example, compute out synchronously: out <= (state == 2'b00); in the clocked block. Also consider one-hot encoding (one bit per state) for faster decode if FPGA speed is critical.",
+      "Power": "Latches or inferred memory (from the incomplete case) can cause spurious toggles. Ensuring out is registered on the clock will avoid unwanted glitches and save power from unnecessary transitions.",
+      "Area": "Using binary-encoded states (as shown) is area-efficient, but if speed allows, one-hot encoding will trade more flip-flops for simpler logic. Make sure to define all cases (or use a default) to avoid unintended latches, keeping area predictable."
+    }
+  },
+  {
+    "question": "verilog\nmodule shift_fifo (\n input clk,\n input rst,\n input wr_en,\n input rd_en,\n input [7:0] din,\n output reg [7:0] dout\n);\n reg [7:0] queue [0:15];\n integer i;\n always @(posedge clk) begin\n if (rst) begin\n for (i = 0; i < 16; i = i+1)\n queue[i] <= 8'b0;\n end else begin\n if (wr_en && !rd_en) begin\n // Shift data right for write\n for (i = 15; i > 0; i = i-1)\n queue[i] <= queue[i-1];\n queue[0] <= din;\n end\n if (rd_en && !wr_en) begin\n dout <= queue[15];\n // Shift data left for read\n for (i = 0; i < 15; i = i+1)\n queue[i] <= queue[i+1];\n queue[15] <= 8'b0;\n end\n end\n end\nendmodule",
+    "answer": {
+      "Performance": "The entire FIFO is implemented by shifting an array every cycle. This creates very long data paths (through many registers) and severely limits clock frequency. Instead, implement a circular buffer with read/write pointers. For example, on a write: \n\nfifo_mem[wr_ptr] <= din;\nwr_ptr <= wr_ptr + 1;\n\nand on a read:\n\ndout <= fifo_mem[rd_ptr];\nrd_ptr <= rd_ptr + 1;\n\nThis way only one pointer increments per cycle, greatly improving throughput.",
+      "Power": "Shifting all 16 bytes toggles many flip-flops each cycle, wasting dynamic power. Using address pointers activates only a small portion of the logic on each operation, saving power.",
+      "Area": "A 16×8 shift register uses 128 flip-flops. In contrast, inferring a 16×8 block RAM (or distributed RAM) uses fewer LUTs. The pointer-based design can map to true RAM, reducing LUT usage (and thus area)."
+    }
+  },
+  {
+    "question": "verilog\nmodule fifo_counter (\n input clk,\n input rst,\n input wr_en,\n input rd_en,\n input [7:0] din,\n output reg [7:0] dout,\n output full,\n output empty\n);\n reg [7:0] mem [0:7];\n reg [2:0] wr_ptr, rd_ptr;\n reg [3:0] count;\n always @(posedge clk or posedge rst) begin\n if (rst) count <= 0;\n else if (wr_en && !full)\n count <= count + 1;\n else if (rd_en && !empty)\n count <= count - 1;\n end\n always @(posedge clk) begin\n if (wr_en && !full) begin\n mem[wr_ptr] <= din;\n wr_ptr <= wr_ptr + 1;\n end\n if (rd_en && !empty) begin\n dout <= mem[rd_ptr];\n rd_ptr <= rd_ptr + 1;\n end\n end\n assign empty = (count == 0);\n assign full = (count == 8);\nendmodule",
+    "answer": {
+      "Performance": "The else if means read and write can't update simultaneously. To allow one-cycle read/write, use separate updates (or compute count <= count + wr_en - rd_en). For example:\n\nif (wr_en && !full) count <= count + 1;\nif (rd_en && !empty) count <= count - 1;\n\nThis ensures the FIFO can handle back-to-back read and write without delay. Also, pipeline the full/empty logic if the count is wide (e.g. register the compare outputs) to meet timing.",
+      "Power": "Only toggle the count and pointers when operations occur. The code already guards with !full/!empty, but ensure clock enables on registers (some FPGAs support gating with enable) to reduce unnecessary flips.",
+      "Area": "The 4-bit count and 3-bit pointers are small. If area is critical, you could use a smaller width (size = 8) or share logic. The given approach is already efficient in area."
+    }
+  },
+  {
+    "question": "verilog\nmodule mem_ctrl (\n input wire clk,\n input wire rst,\n input wire cs,\n input wire we,\n input wire oe,\n input wire [7:0] addr,\n input wire [15:0] data_in,\n output reg [15:0] data_out\n);\n reg [15:0] memory [0:255];\n always @(posedge clk) begin\n if (rst) begin\n // (no reset of memory for simplicity)\n end else if (cs) begin\n if (we)\n memory[addr] <= data_in;\n else if (oe)\n data_out <= memory[addr];\n end\n end\nendmodule",
+    "answer": {
+      "Performance": "Separate read and write paths. Using else if means you can't write and read in the same cycle (priority is fixed). Consider breaking this into two always-blocks or using a dual-port RAM so read and write can occur independently. For example:\n\nalways @(posedge clk) if (we && cs) memory[addr] <= data_in;\nalways @(posedge clk) if (oe && cs) data_out <= memory[addr];\n\nThis eases timing by decoupling the operations.",
+      "Power": "Only assert cs, we, or oe when needed. The code already uses cs to gate the operation; ensure synthesis uses it as a clock enable for the memory or output register, reducing toggling.",
+      "Area": "If the memory is small, distributed RAM is fine. For larger sizes, ensure it infers dedicated block RAM (synchronous). Block RAM is area-efficient for larger tables. Also, remove the else logic if not needed to simplify the synthesizer's job."
+    }
+  },
+  {
+    "question": "verilog\nmodule bad_fsm (\n input clk,\n input rst,\n input in1, in2, in3,\n output reg out\n);\n reg [1:0] state;\n parameter IDLE = 2'b00, S1 = 2'b01, S2 = 2'b10, S3 = 2'b11;\n always @(posedge clk or posedge rst) begin\n if (rst)\n state <= IDLE;\n else begin\n if (in1) state <= S1;\n if (in2) state <= S2;\n if (in3) state <= S3;\n end\n end\n always @* begin\n case (state)\n IDLE: out = 0;\n S1: out = 1;\n S2: out = 0;\n S3: out = 1;\n endcase\n end\nendmodule",
+    "answer": {
+      "Performance": "The sequential if statements imply multiple priority checks each cycle. Change to an if/else if chain or case to prevent redundant evaluations. For instance:\n\nif (in1) state <= S1;\nelse if (in2) state <= S2;\nelse if (in3) state <= S3;\n\nThis reduces combinational logic depth. Also, make sure a default or reset state covers all conditions.",
+      "Power": "The parallel checks cause multiple signals to toggle. Using prioritized conditions means only one path is active at a time, cutting unnecessary switching.",
+      "Area": "One-hot encoding could simplify the logic here (one-hot is faster for decoding) but at the cost of more flip-flops. If area is more critical than speed, keep the binary encoding but simplify logic with default assignments to avoid latches."
+    }
+  },
+  {
+    "question": "verilog\nmodule burst_reader(\n input clk,\n input read_enable,\n input [7:0] addr,\n output reg [15:0] out0,\n output reg [15:0] out1,\n output reg [15:0] out2,\n output reg [15:0] out3\n);\n reg [15:0] memory [0:255];\n always @(posedge clk) begin\n if (read_enable) begin\n out0 <= memory[addr];\n out1 <= memory[addr+1];\n out2 <= memory[addr+2];\n out3 <= memory[addr+3];\n end\n end\nendmodule",
+    "answer": {
+      "Performance": "Trying to read four addresses in one clock from a single-port memory is unrealistic; synthesizer would have to replicate the memory or fail timing. Instead, pipeline the burst or use true multi-port memory. For example, read one word per cycle across four cycles, or use a dual-port RAM for two-at-a-time access.",
+      "Power": "Simultaneously accessing multiple locations toggles many lines. Sequential access (one at a time) will only toggle needed address lines and data outputs, saving power.",
+      "Area": "Replicating the memory to support 4-wide reads would quadruple the area. Use a single memory with a burst counter, or use block RAM's built-in dual-port feature. The loop version shown would translate to a huge multiplexer tree or multiple RAMs, which is very area-intensive."
+    }
+  },
+  {
+    "question": "verilog\nmodule async_fifo (\n input wr_clk,\n input rd_clk,\n input wr_rst,\n input rd_rst,\n input wr_en,\n input rd_en,\n input [7:0] din,\n output reg [7:0] dout,\n output full,\n output empty\n);\n reg [7:0] mem [0:255];\n reg [7:0] wr_ptr, rd_ptr;\n always @(posedge wr_clk or posedge wr_rst) begin\n if (wr_rst) wr_ptr <= 0;\n else if (wr_en) begin\n mem[wr_ptr] <= din;\n wr_ptr <= wr_ptr + 1;\n end\n end\n always @(posedge rd_clk or posedge rd_rst) begin\n if (rd_rst) rd_ptr <= 0;\n else if (rd_en) begin\n dout <= mem[rd_ptr];\n rd_ptr <= rd_ptr + 1;\n end\n end\n // No pointer synchronization or Gray coding\n assign empty = (wr_ptr == rd_ptr);\n assign full = ((wr_ptr - rd_ptr) == 1);\nendmodule",
+    "answer": {
+      "Performance": "The empty/full flags use unsynchronized binary pointers, which is not reliable in an async FIFO. Use Gray-coded pointers for cross-domain synchronization. Gray code means only one bit changes per increment, reducing metastability issues.",
+      "Power": "Pointer registers toggle each clock; minimize toggling by gating write logic when empty/full to idle the FIFO.",
+      "Area": "The code uses 8-bit pointers and a 256×8 memory. If FIFO depth is smaller, shrink these widths. Also, implement the flags as registers synchronized to each domain to meet timing (this adds a couple of flip-flops but improves stability)."
+    }
+  },
+  {
+    "question": "verilog\nmodule handshake_fsm (\n input clk,\n input rst,\n input valid_in,\n input ready_out,\n output reg ready_in,\n output reg valid_out\n);\n reg [1:0] state;\n always @(posedge clk or posedge rst) begin\n if (rst) begin\n state <= 0;\n ready_in <= 0;\n valid_out <= 0;\n end else begin\n case (state)\n 2'b00: if (valid_in) begin\n ready_in <= 1;\n state <= 2'b01;\n end\n 2'b01: if (ready_out) begin\n valid_out <= 1;\n state <= 2'b00;\n end\n endcase\n end\n end\nendmodule",
+    "answer": {
+      "Performance": "The FSM should properly clear ready_in and valid_out when idle. Currently, once set they stay high until reset. Add default assignments (e.g., ready_in <= 0; valid_out <= 0; in each branch) or register them on every clock edge. This ensures clean handshakes and avoids unintended stalls.",
+      "Power": "Gating the outputs when not active saves toggling. For instance, only assert ready_in or valid_out for a single cycle, then automatically de-assert. This prevents staying in a high state and reduces switching.",
+      "Area": "The simple 2-state FSM is already minimal. If multiple transactions are common, you could pipeline handshake signals or use a small FIFO buffer for decoupling, but that increases area. Keep the design minimal for area if throughput is low."
+    }
+  },
+  {
+    "question": "verilog\nmodule dual_port_fsm (\n input clk,\n input rst,\n input rd_en,\n input wr_en,\n input [7:0] addr,\n input [7:0] din,\n output reg [7:0] dout\n);\n reg [7:0] memory [0:255];\n always @(posedge clk) begin\n if (wr_en) begin\n memory[addr] <= din;\n end\n if (rd_en) begin\n dout <= memory[addr];\n end\n end\nendmodule",
+    "answer": {
+      "Performance": "This tries to do a read and write in one cycle on the same memory. True single-port RAM cannot do both simultaneously (the synthesizer might time-multiplex or ignore one). For full-duplex, use a dual-port memory block or separate read/write cycles. For example, register the address and data in two stages:\n\nif (wr_en) memory[addr] <= din;\nif (rd_en) begin data_reg <= memory[addr]; end\ndout <= data_reg;\n\nThis splits the operations and eases timing\nmedium.com\n",
+      "Power": "Avoid unnecessary toggles when only one operation is needed. The revised pipeline only drives the RAM port in one direction at a time.",
+      "Area": "A dual-port RAM uses more resources. If one-port memory is only available, the design above avoids complex logic by sequentializing. Alternatively, use two single-port RAMs (one for read, one for write) if area allows."
+    }
+  }
+]

@@ -1,0 +1,82 @@
+[
+  {
+    "question": "module cache_ctrl(\n  input clk,\n  input [31:0] addr,\n  output reg hit\n);\n  reg [31:0] tag_array[63:0];\n  always @(posedge clk) begin\n    hit <= (tag_array[addr[7:2]] == addr[31:8]);\n  end\nendmodule",
+    "answer": {
+      "Performance": "Implement way prediction:\nAdd prediction register for likely way",
+      "Power": "Banked tag comparison with selective activation",
+      "Area": "Use CAM instead of SRAM for tag storage"
+    }
+  },
+  {
+    "question": "module serializer(\n  input clk,\n  input [7:0] data,\n  output reg serial\n);\n  reg [2:0] count;\n  always @(posedge clk) begin\n    serial <= data[count];\n    count <= count + 1;\n  end\nendmodule",
+    "answer": {
+      "Performance": "Precompute shifted versions:\nUse barrel shifter with parallel load",
+      "Power": "Stop clock when transmission complete",
+      "Area": "Share counter with other serializer modules"
+    }
+  },
+  {
+    "question": "module decoder(\n  input [2:0] code,\n  output reg [7:0] out\n);\n  always @(*) begin\n    case(code)\n      3'b000: out = 8'h01;\n      3'b001: out = 8'h02;\n      // ... all cases\n    endcase\n  end\nendmodule",
+    "answer": {
+      "Performance": "Convert to shift operation:\nout <= 8'b1 << code",
+      "Power": "Gate unused bits in output register",
+      "Area": "Implement as ROM with code as address"
+    }
+  },
+  {
+    "question": "module alu(\n  input [15:0] a, b,\n  input [1:0] op,\n  output reg [15:0] out\n);\n  always @(*) begin\n    case(op)\n      2'b00: out = a + b;\n      2'b01: out = a - b;\n      // ... more operations\n    endcase\n  end\nendmodule",
+    "answer": {
+      "Performance": "Pipeline critical operations:\nSeparate adder and subtractor paths",
+      "Power": "Operand isolation for unused units",
+      "Area": "Share carry logic between add/sub"
+    }
+  },
+  {
+    "question": "module interrupt_ctrl(\n  input clk,\n  input [7:0] int_req,\n  output reg int_ack\n);\n  always @(posedge clk) begin\n    if (|int_req) int_ack <= 1'b1;\n  end\nendmodule",
+    "answer": {
+      "Performance": "Implement priority queue:\nAdd priority encoder with registered outputs",
+      "Power": "Clock gate acknowledgment logic when idle",
+      "Area": "Share encoder with other control modules"
+    }
+  },
+  {
+    "question": "module clock_div(\n  input clk,\n  output reg slow_clk\n);\n  reg [7:0] counter;\n  always @(posedge clk) begin\n    counter <= counter + 1;\n    slow_clk <= counter[7];\n  end\nendmodule",
+    "answer": {
+      "Performance": "Use Gray code counter:\ncounter_gray <= counter ^ (counter >> 1)",
+      "Power": "Dynamic frequency scaling based on load",
+      "Area": "Share counter with other clock domains"
+    }
+  },
+  {
+    "question": "module dma_ctrl(\n  input clk,\n  input transfer,\n  output reg [31:0] addr\n);\n  always @(posedge clk) begin\n    if (transfer)\n      addr <= addr + 4;\n  end\nendmodule",
+    "answer": {
+      "Performance": "Add address prefetch buffer:\nPrefetch next 4 addresses",
+      "Power": "Clock gate address counter when idle",
+      "Area": "Combine with data counter for burst transfers"
+    }
+  },
+  {
+    "question": "module debounce(\n  input clk, button,\n  output reg clean\n);\n  reg [19:0] counter;\n  always @(posedge clk) begin\n    if (button) counter <= 0;\n    else counter <= counter + 1;\n    clean <= (counter == 20'hFFFFF);\n  end\nendmodule",
+    "answer": {
+      "Performance": "Implement parallel bit checking:\nUse comparator tree instead of counter",
+      "Power": "Dynamic clock scaling based on input activity",
+      "Area": "Share counters between multiple debounce modules"
+    }
+  },
+  {
+    "question": "module pwm(\n  input clk,\n  input [7:0] duty,\n  output reg pwm_out\n);\n  reg [7:0] counter;\n  always @(posedge clk) begin\n    counter <= counter + 1;\n    pwm_out <= (counter < duty);\n  end\nendmodule",
+    "answer": {
+      "Performance": "Use phase-shifted counters:\nMultiple counters with offset phases",
+      "Power": "Dynamic resolution adjustment",
+      "Area": "Share counter between multiple PWM channels"
+    }
+  },
+  {
+    "question": "module sync_fifo(\n  input clk,\n  input wr, rd,\n  input [7:0] data_in,\n  output reg [7:0] data_out\n);\n  reg [7:0] mem[15:0];\n  reg [4:0] wptr, rptr;\n  always @(posedge clk) begin\n    if (wr && !full) mem[wptr[3:0]] <= data_in;\n    if (rd && !empty) data_out <= mem[rptr[3:0]];\n    wptr <= wptr + wr;\n    rptr <= rptr + rd;\n  end\n  assign full = (wptr[4] != rptr[4]) && (wptr[3:0] == rptr[3:0]);\n  assign empty = (wptr == rptr);\nendmodule",
+    "answer": {
+      "Performance": "Implement look-ahead full/empty:\nPredict full/empty 1 cycle early using next pointers",
+      "Power": "Memory bank power gating based on utilization",
+      "Area": "Optimize pointer width using parametric depth"
+    }
+  }
+]

@@ -1,0 +1,162 @@
+[
+    {
+      "question": "module alu(input [31:0] a, b, input sel, output [31:0] result);\n    assign result = sel ? (a - b) : (a + b);\nendmodule",
+      "answer": {
+        "Performance": "Using separate add and subtract operations can lead to longer critical paths if synthesized as distinct logic. Optimize by reusing a single adder with carry-in for subtraction.",
+        "Power": "Separate add/sub logic increases gate count, raising power consumption. Sharing logic reduces power.",
+        "Area": "A single adder with carry-in is smaller than separate add/sub units."
+      }
+    },
+    {
+      "question": "module pipeline(input clk, rst, input [31:0] instr, output [31:0] pc);\n    reg [31:0] regfile [0:31];\n    reg [31:0] id_ex_rs1, id_ex_rs2;\n    always @(posedge clk) if (~rst) begin\n        id_ex_rs1 <= regfile[instr[19:15]];\n        id_ex_rs2 <= regfile[instr[24:20]];\n        // EX stage\n        case (opcode)\n            ADD: ex_mem_alu_result <= id_ex_rs1 + id_ex_rs2;\n        endcase\n        // WB stage\n        regfile[instr[11:7]] <= ex_mem_alu_result;\n    end\nendmodule",
+      "answer": {
+        "Performance": "Without data forwarding, dependent instructions stall, reducing throughput. Add forwarding logic to pass results from EX/MEM to ID/EX.",
+        "Power": "Stalling wastes power; forwarding keeps the pipeline active, improving efficiency.",
+        "Area": "Forwarding adds multiplexers but is a small overhead compared to performance gains."
+      }
+    },
+    {
+      "question": "module shifter(input [31:0] a, input [4:0] shamt, output [31:0] result);\n    always @(*) begin\n        case (shamt)\n            0: result = a;\n            1: result = {a[30:0], 1'b0};\n            2: result = {a[29:0], 2'b0};\n            // ... up to 31\n            default: result = a;\n        endcase\n    end\nendmodule",
+      "answer": {
+        "Performance": "Case statements for shifts create deep logic cones. Use a barrel shifter for constant-time shifts.",
+        "Power": "Barrel shifters are more efficient, reducing power for frequent shifts.",
+        "Area": "Barrel shifters share logic across shifts, reducing total area."
+      }
+    },
+    {
+      "question": "always @(*) begin\n    if (mem_read) begin\n        pc_write = 0;\n        if_id_write = 0;\n    end else begin\n        pc_write = 1;\n        if_id_write = 1;\n    end\nend",
+      "answer": {
+        "Performance": "Stalling on all loads is inefficient. Only stall if the next instruction depends on the load.",
+        "Power": "Unnecessary stalls waste power; dependency-based stalling minimizes this.",
+        "Area": "No significant area impact; logic is similar."
+      }
+    },
+    {
+      "question": "module regfile_single_read(input clk, input [4:0] read_addr, output [31:0] read_data, input [4:0] write_addr, input [31:0] write_data, input write_en);\n    reg [31:0] regs [0:31];\n    always @(posedge clk) if (write_en) regs[write_addr] <= write_data;\n    assign read_data = regs[read_addr];\nendmodule",
+      "answer": {
+        "Performance": "Single-read-port limits simultaneous reads (e.g., rs1 and rs2). Use dual-read-port for parallel access.",
+        "Power": "Sequential reads may increase power; dual-port allows single-cycle reads.",
+        "Area": "Dual-port increases area but is standard for CPUs."
+      }
+    },
+    {
+      "question": "always @(posedge clk) begin\n    if (enable) count <= count + 1;\n    else count <= count;\nend",
+      "answer": {
+        "Performance": "Redundant assignment doesn't affect performance but clutters code.",
+        "Power": "Redundant logic may increase power slightly; remove unnecessary assignments.",
+        "Area": "Redundant assignments can lead to extra logic; remove them to save area."
+      }
+    },
+    {
+      "question": "reg [31:0] sum;\nalways @(*) begin\n    sum = a + b;\nend",
+      "answer": {
+        "Performance": "Using reg for combinational logic risks latches. Use wire for clarity and correctness.",
+        "Power": "Latches consume more power than combinational logic.",
+        "Area": "Latches increase area; wire ensures combinational logic."
+      }
+    },
+    {
+      "question": "module ripple_carry_adder(input [31:0] a, b, output [31:0] sum);\n    assign sum[0] = a[0] ^ b[0];\n    assign cout[0] = a[0] & b[0];\n    genvar i;\n    generate\n        for (i = 1; i < 32; i = i + 1) begin : carry_chain\n            assign sum[i] = a[i] ^ b[i] ^ cout[i-1];\n            assign cout[i] = (a[i] & b[i]) | (a[i] & cout[i-1]) | (b[i] & cout[i-1]);\n        end\n    endgenerate\nendmodule",
+      "answer": {
+        "Performance": "Ripple carry has a long critical path. Use carry-lookahead or fast adder architectures.",
+        "Power": "Sequential carry propagation can increase power; CLA reduces this.",
+        "Area": "CLA requires more area but is worth it for performance."
+      }
+    },
+    {
+      "question": "module large_logic(input [31:0] a, b, output [31:0] result);\n    wire [31:0] temp1 = a + b;\n    wire [31:0] temp2 = temp1 * 2;\n    wire [31:0] temp3 = temp2 - 1;\n    assign result = temp3;\nendmodule",
+      "answer": {
+        "Performance": "Large combinational logic limits frequency. Pipeline into multiple stages.",
+        "Power": "Pipelining adds flip-flops but allows higher frequency operation.",
+        "Area": "Pipelining increases area due to flip-flops."
+      }
+    },
+    {
+      "question": "parameter S0 = 8'b00000001;\nparameter S1 = 8'b00000010;\n// ...\nreg [7:0] state;",
+      "answer": {
+        "Performance": "One-hot encoding may reduce decoding delay but uses more flip-flops.",
+        "Power": "More flip-flops increase static power; binary encoding is more efficient.",
+        "Area": "One-hot uses more area (8 vs. 3 flip-flops for 8 states); use binary for area savings."
+      }
+    },
+    {
+      "question": "always @(posedge clk) begin\n    pc_reg <= pc_reg + 4;\n    if (branch_taken) pc_reg <= branch_target;\nend",
+      "answer": {
+        "Performance": "No branch prediction causes bubbles. Use simple predictors like always-taken or BTB.",
+        "Power": "Flushing pipeline on mispredicts wastes power; prediction reduces this.",
+        "Area": "Simple predictors add small area overhead."
+      }
+    },
+    {
+      "question": "module alu(input [31:0] a, b, input [2:0] op, output [31:0] result);\n    case (op)\n        3'b000: result = a + b;\n        3'b001: result = a - b;\n        3'b010: result = a & b;\n        // ... other operations\n    endcase\nendmodule",
+      "answer": {
+        "Performance": "Separate logic for each operation can slow down the ALU. Share logic where possible (e.g., add/sub).",
+        "Power": "Shared logic reduces gate count, lowering power.",
+        "Area": "Sharing logic reduces total area."
+      }
+    },
+    {
+      "question": "always @(posedge clk) begin\n    if (stall) begin\n        // Do nothing\n    end else begin\n        // Normal operation\n    end\nend",
+      "answer": {
+        "Performance": "Excessive stalling reduces throughput. Optimize hazard detection to minimize stalls.",
+        "Power": "Stalls waste power; minimize them with better hazard detection.",
+        "Area": "No direct area impact."
+      }
+    },
+    {
+      "question": "module datapath(input clk, input [31:0] instr);\n    // Long combinational path\n    wire [31:0] alu_out = (instr[5:0] == 6'b100000) ? (rs1 + rs2) : (rs1 - rs2);\nendmodule",
+      "answer": {
+        "Performance": "Long combinational paths limit clock frequency. Break into pipeline stages.",
+        "Power": "Pipelining allows higher frequency but adds flip-flops.",
+        "Area": "Pipelining increases area due to flip-flops."
+      }
+    },
+    {
+      "question": "reg [31:0] sum;\nalways @(posedge clk) sum <= a + b;",
+      "answer": {
+        "Performance": "Unnecessary flip-flop for combinational logic. Use wire if not clocked.",
+        "Power": "Flip-flops consume more power than wires.",
+        "Area": "Flip-flops increase area; use wire for combinational logic."
+      }
+    },
+    {
+      "question": "module control(input [5:0] opcode, output reg [4:0] control_signals);\n    always @(*) begin\n        case (opcode)\n            6'b000000: control_signals = 5'b10000; // R-type\n            6'b100011: control_signals = 5'b01001; // LW\n            // ... many cases\n        endcase\n    end\nendmodule",
+      "answer": {
+        "Performance": "Large case statements can be slow. Use one-hot encoding or state machines for clarity.",
+        "Power": "Simpler control logic reduces power.",
+        "Area": "One-hot encoding may increase area but simplifies logic."
+      }
+    },
+    {
+      "question": "always @(posedge clk) begin\n    if (enable) q <= d;\n    else q <= q;\nend",
+      "answer": {
+        "Performance": "Redundant assignment doesn't affect performance but clutters code.",
+        "Power": "Redundant logic may increase power slightly.",
+        "Area": "Redundant assignments can lead to extra logic; remove them."
+      }
+    },
+    {
+      "question": "module memory(input clk, input [31:0] addr, output [31:0] data);\n    reg [31:0] mem [0:1023];\n    always @(posedge clk) data <= mem[addr];\nendmodule",
+      "answer": {
+        "Performance": "Synchronous memory adds latency. Use asynchronous memory if possible.",
+        "Power": "Synchronous memory may consume more power due to clocking.",
+        "Area": "No significant area difference."
+      }
+    },
+    {
+      "question": "parameter S0 = 3'b000;\nparameter S1 = 3'b001;\n// ...\nreg [2:0] state;\nalways @(posedge clk) begin\n    case (state)\n        S0: if (condition) state <= S1; else state <= S0;\n        S1: state <= S2;\n        // ... many states\n    endcase\nend",
+      "answer": {
+        "Performance": "Large state machines can have long critical paths. Decompose into smaller machines.",
+        "Power": "Smaller machines reduce logic complexity and power.",
+        "Area": "Decomposition may increase area slightly but improves manageability."
+      }
+    },
+    {
+      "question": "module datapath(input clk, input [31:0] instr);\n    wire [31:0] alu_out = a + b + c + d;\nendmodule",
+      "answer": {
+        "Performance": "Chaining multiple adders increases delay. Use a tree structure for additions.",
+        "Power": "Tree structure reduces the number of adders needed, lowering power.",
+        "Area": "Tree structure can reduce total adder count."
+      }
+    }
+  ]
